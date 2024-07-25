@@ -2,11 +2,14 @@ from typing import List
 import matplotlib.pyplot as plt
 import networkx as nx
 
+
+
 def draw_tree(root):
     G = nx.DiGraph()
 
     # A dictionary to store nodes by unique identifiers
     node_objects = {}
+    node_colors = {}
 
     def add_edges(node, parent_id=None):
         node_id = f"{node.name}_{id(node)}"
@@ -18,30 +21,51 @@ def draw_tree(root):
 
     add_edges(root)
 
-    # Create node labels with inputs and outputs
+    # Create node labels and determine node colors
     labels = {}
     for node in G.nodes:
         machine = node_objects[node]
-        inputs_str = ", ".join(str(stack) for stack in machine.inputs)
-        outputs_str = ", ".join(str(stack) for stack in machine.outputs)
-        efficiency_str = f"Efficiency: {machine.output_efficiency:.2f}%"
-        labels[node] = f"{machine.name}\nInputs: [{inputs_str}]\nOutputs: [{outputs_str}]\n{efficiency_str}"
-    
+        if machine.name == "Storage":
+            labels[node] = machine.name
+            node_colors[node] = "lightgrey"  # Color for Storage nodes
+        else:
+            inputs_str = ", ".join(str(stack) for stack in machine.inputs)
+            outputs_str = ", ".join(str(stack) for stack in machine.outputs)
+            efficiency_str = f"Efficiency: {machine.output_efficiency:.2f}%"
+            
+            # Apply color based on efficiency
+            if machine.output_efficiency < 100:
+                node_colors[node] = "red"
+            else:
+                node_colors[node] = "lightblue"
+
+            labels[node] = f"{machine.name}\nInputs: [{inputs_str}]\nOutputs: [{outputs_str}]\n{efficiency_str}"
+
     pos = nx.spectral_layout(G)
 
     plt.figure(figsize=(12, 8))
     nx.draw(
         G,
         pos,
-        with_labels=True,
-        labels=labels,
+        with_labels=False,  # We handle labels separately
         node_size=2000,
-        node_color="lightblue",
+        node_color=[node_colors[node] for node in G.nodes],  # Apply node colors
         font_size=10,
         font_weight="bold",
         arrows=True,
+        edge_color="gray"
     )
+
+    # Manually add labels
+    for node, (x, y) in pos.items():
+        plt.text(x, y, labels[node],
+                 fontsize=10,
+                 ha='center',
+                 va='center',
+                 weight='bold')
+
     plt.show()
+
 
 class Stack:
     def __init__(self, count: int, item: str) -> None:
