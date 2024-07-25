@@ -1,11 +1,10 @@
 from typing import List
 import matplotlib.pyplot as plt
 import networkx as nx
-from networkx.drawing.nx_agraph import graphviz_layout
 
 def draw_tree(root):
     G = nx.DiGraph()
-    
+
     # A dictionary to store nodes by unique identifiers
     node_objects = {}
 
@@ -16,21 +15,32 @@ def draw_tree(root):
             G.add_edge(parent_id, node_id)
         for child in node.children:
             add_edges(child, node_id)
-    
+
     add_edges(root)
-    
+
     # Create node labels with inputs and outputs
     labels = {}
     for node in G.nodes:
         machine = node_objects[node]
         inputs_str = ", ".join(str(stack) for stack in machine.inputs)
         outputs_str = ", ".join(str(stack) for stack in machine.outputs)
-        labels[node] = f"{machine.name}\nInputs: [{inputs_str}]\nOutputs: [{outputs_str}]"
+        efficiency_str = f"Efficiency: {machine.output_efficiency:.2f}%"
+        labels[node] = f"{machine.name}\nInputs: [{inputs_str}]\nOutputs: [{outputs_str}]\n{efficiency_str}"
     
     pos = nx.spectral_layout(G)
-    
+
     plt.figure(figsize=(12, 8))
-    nx.draw(G, pos, with_labels=True, labels=labels, node_size=2000, node_color="lightblue", font_size=10, font_weight="bold", arrows=True)
+    nx.draw(
+        G,
+        pos,
+        with_labels=True,
+        labels=labels,
+        node_size=2000,
+        node_color="lightblue",
+        font_size=10,
+        font_weight="bold",
+        arrows=True,
+    )
     plt.show()
 
 class Stack:
@@ -53,11 +63,16 @@ class Machine:
         self.inputs = [] if inputs is None else inputs
         self.outputs = [] if outputs is None else outputs
         self.children = [] if children is None else children
+        self.output_efficiency = 0  # Initialize output efficiency
+
+        # Calculate efficiency after initializing children
+        self.calculate_output_efficiency()
 
     def __str__(self, indent: int = 0) -> str:
         indent_str = "| " * indent
         inputs_str = ", ".join(str(stack) for stack in self.inputs)
         outputs_str = ", ".join(str(stack) for stack in self.outputs)
+        output_efficiency_str = f"Efficiency: {self.output_efficiency:.2f}%"
 
         # Handle the case where there are no children
         if self.children:
@@ -81,6 +96,7 @@ class Machine:
             + f"{indent_str}{bright_blue}{self.name}{reset}\n"
             + f"{indent_str}{green}Inputs: [{inputs_str}]{reset}\n"
             + f"{indent_str}{magenta}Outputs: [{outputs_str}]{reset}\n"
+            + f"{indent_str}{output_efficiency_str}\n"
             + f"{indent_str}{children_str}"
         )
 
@@ -89,6 +105,8 @@ class Machine:
 
     def add_child(self, machine: "Machine") -> "Machine":
         self.children.append(machine)
+        # Recalculate efficiency whenever a child is added
+        self.calculate_output_efficiency()
         return self
 
     def add_line(self, machines: List["Machine"]) -> "Machine":
@@ -97,9 +115,25 @@ class Machine:
             current.add_child(machine)
             current = machine
         return self
+    
+    def calculate_output_efficiency(self) -> None:
+        total_output = sum(stack.count for stack in self.outputs)
+        if total_output == 0:
+            self.output_efficiency = 0
+            return
+        
+        total_used = 0
+        for child in self.children:
+            child_input_sum = sum(stack.count for stack in child.inputs)
+            total_used += child_input_sum
+        
+        self.output_efficiency = (total_used / total_output) * 100
+        
+        for child in self.children:
+            child.calculate_output_efficiency()  # Recursive calculation
 
 def main():
-    iron1: Machine = Machine("Miner", None, [Stack(60, "Iron Ore")]).add_child(
+    iron1 = Machine("Miner", None, [Stack(60, "Iron Ore")]).add_child(
         Machine(
             "Smelter", [Stack(30, "Iron Ore")], [Stack(30, "Iron Ingot")]
         ).add_child(
@@ -110,7 +144,7 @@ def main():
     )
     print(f"* Iron 1{iron1}")
 
-    iron2: Machine = Machine("Storage", None, [Stack(30, "Iron Ore")]).add_child(
+    iron2 = Machine("Storage", None, [Stack(30, "Iron Ore")]).add_child(
         Machine("Smelter", [Stack(30, "Iron Ore")], [Stack(30, "Iron Ingot")])
         .add_child(
             Machine(
@@ -118,10 +152,14 @@ def main():
             ).add_child(Machine("Storage", [Stack(15, "Iron Rod")]))
         )
         .add_child(
-            Machine("Constructor", [Stack(15, "Iron Ingot")], [Stack(15, "Iron Rod")]).add_child(
-            Machine("Constructor", [Stack(10, "Iron Rod")], [Stack(40, "Screw")]).add_child(Machine("Storage", [Stack(40, "Screw")]))
-        ))
-            
+            Machine(
+                "Constructor", [Stack(15, "Iron Ingot")], [Stack(15, "Iron Rod")]
+            ).add_child(
+                Machine(
+                    "Constructor", [Stack(10, "Iron Rod")], [Stack(40, "Screw")]
+                ).add_child(Machine("Storage", [Stack(40, "Screw")]))
+            )
+        )
     )
 
     print(f"* Iron 2{iron2}")
