@@ -30,7 +30,7 @@ machines_list = [
         ("Storage6", 30, 30, "Limestone", ["Constructor7"]),
         ("Constructor7", 45, 15, "Concrete", ["Storage7"]),
         ("Storage7", 15, 15, "Concrete", [])
-    ]
+    ],
 ]
 
 def create_graph(machines):
@@ -41,13 +41,15 @@ def create_graph(machines):
     def calculate_efficiencies(machine_dict):
         efficiencies = {}
         for name, (input_amt, output_amt, item_type, children) in machine_dict.items():
-            total_used = 0
+            if children:
+                split_output_amt = output_amt / len(children)
+            else:
+                split_output_amt = output_amt
+            
             for child_name in children:
-                # Find the amount used by this child machine from its input
                 child_input = machine_dict[child_name][0]
-                total_used += child_input
-            efficiency = (total_used / output_amt) * 100 if output_amt > 0 else 0
-            efficiencies[name] = efficiency
+                efficiency = (split_output_amt / child_input) * 100 if child_input > 0 else 0
+                efficiencies[(name, child_name)] = efficiency
         return efficiencies
 
     # Calculate efficiencies
@@ -57,7 +59,7 @@ def create_graph(machines):
     G = nx.DiGraph()
     for name, (input_amt, output_amt, item_type, children) in machine_dict.items():
         for child_name in children:
-            G.add_edge(name, child_name, efficiency=efficiencies[name], item_type=item_type)
+            G.add_edge(name, child_name, efficiency=efficiencies[(name, child_name)], item_type=item_type)
 
     return G, machine_dict
 
@@ -104,21 +106,72 @@ def plot_graph(ax, G, machine_dict, title):
     # Define the layout of the graph
     pos = nx.multipartite_layout(G, scale=0.7, align="horizontal", subset_key='layer')
 
-    # Define edge colors based on efficiency
-    edge_colors = [
-        'red' if d['efficiency'] < 100 else 'black' for u, v, d in G.edges(data=True)
-    ]
+    # Function to calculate the total input required by descendants of the same item type
+    def calculate_total_descendant_input(node, machine_dict, G):
+        total_input = 0
+        output_item_type = machine_dict[node][2]
+        descendants = nx.descendants(G, node)
+        
+        # Calculate total input required by descendants
+        for descendant in descendants:
+            parents = list(G.predecessors(descendant))
+            
+            if parents:
+                # For each descendant, check if the input type matches the output type of its parent
+                parent_output_type = machine_dict[parents[0]][2]
+                
+                if parent_output_type == output_item_type:
+                    total_input += machine_dict[descendant][0]
+        
+        return total_input
+
+    # Define node colors based on oversupply criteria
+    node_colors = []
+    nodes_to_color_red = set()
+    for node in G.nodes():
+        _, output_amt, item_type, children = machine_dict[node]
+        if not children:
+            node_colors.append('lightblue')
+        else:
+            # Calculate the total required input by descendants for the same item type
+            total_descendant_input = calculate_total_descendant_input(node, machine_dict, G)
+            
+            # Adjust output amt to be distributed among children
+            total_output = output_amt / len(children) if children else output_amt
+            
+            # Determine if node is oversupplying
+            if output_amt > total_descendant_input:
+                node_colors.append('orange')
+            else:
+                node_colors.append('lightblue')
+
+    # Define edge colors and labels based on efficiency
+    edge_colors = []
+    edge_labels = {}
+    for u, v, d in G.edges(data=True):
+        efficiency = d['efficiency']
+        if efficiency > 100:
+            edge_colors.append('orange')
+            edge_labels[(u, v)] = f'{efficiency:.0f}%'
+        elif efficiency < 100:
+            edge_colors.append('red')
+            edge_labels[(u, v)] = f'{efficiency:.0f}%'
+            nodes_to_color_red.add(u)  # Mark this node to be colored red
+        else:
+            edge_colors.append('black')
+
+    # Update node colors for nodes that should be red
+    for i, node in enumerate(G.nodes()):
+        if node in nodes_to_color_red:
+            node_colors[i] = 'red'
 
     # Draw the graph using nx.draw to include arrows
     nx.draw(
-        G, pos, ax=ax, with_labels=False, node_size=2500, node_color='lightblue', font_size=10,
+        G, pos, ax=ax, with_labels=False, node_size=2500, node_color=node_colors, font_size=10,
         edge_color=edge_colors, linewidths=1, arrows=True, arrowsize=20, arrowstyle='-|>', connectionstyle='arc3,rad=0'
     )
 
     # Draw the edge labels with efficiency values
-    edge_labels = {(u, v): f'{d["efficiency"]:.0f}%' for u, v, d in G.edges(data=True) if d["efficiency"] < 100}
-    edge_label_positions = {edge: (np.array(pos[edge[0]]) + np.array(pos[edge[1]])) / 2 for edge in G.edges if G[edge[0]][edge[1]]["efficiency"] < 100}
-
     nx.draw_networkx_edge_labels(
         G, pos, ax=ax, edge_labels=edge_labels, font_size=10, 
         label_pos=0.5, bbox=dict(facecolor='white', alpha=0.5)  # Semi-transparent background
