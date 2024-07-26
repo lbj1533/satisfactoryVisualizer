@@ -196,5 +196,32 @@ def main():
 
     draw_tree(iron1)
 
+    copper_wire_storage = Machine("Storage")
+    copper1 = Machine("Miner", None, [Stack(60, "Copper Ore")]).add_child(
+        Machine("Storage").add_child(
+            Machine(
+                "Smelter", [Stack(30, "Copper Ore")], [Stack(30, "Copper Ingot")]
+            ).add_child(
+                Machine("Storage")
+                .add_child(
+                    Machine(
+                        "Constructor",
+                        [Stack(15, "Copper Ingot")],
+                        [Stack(30, "Copper Wire")],
+                    ).add_child(copper_wire_storage)
+                )
+                .add_child(
+                    Machine(
+                        "Constructor",
+                        [Stack(15, "Copper Ingot")],
+                        [Stack(30, "Copper Wire")],
+                    ).add_child(copper_wire_storage)
+                )
+            )
+        )
+    )
+
+    draw_tree(copper1)
+
 if __name__ == "__main__":
     main()
